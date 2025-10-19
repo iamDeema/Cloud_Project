@@ -41,7 +41,7 @@ POWERLOG_EXE_CANDIDATES = [
 pl_proc = None
 pl_csv_path = None
 
-_cpu_t, _cpu_sys, _cpu_proc, _ram_proc_mb, _cpu_temp_c = [], [], [], [], []
+_cpu_t, _cpu_sys, _cpu_proc, _ram_proc_mb = [], [], [], []
 
 
 def sampler_loop(stop_evt, poll=0.25):
@@ -52,7 +52,6 @@ def sampler_loop(stop_evt, poll=0.25):
         _cpu_sys.append(psutil.cpu_percent(None))
         _cpu_proc.append(proc.cpu_percent(None))  # can exceed 100 on multi-core
         _ram_proc_mb.append(proc.memory_info().rss / (1024 ** 2))
-        _cpu_temp_c.append(0.0)  # keep numeric; Windows often has no sensors
         time.sleep(poll)
 
 
@@ -223,15 +222,13 @@ def main(args):
 
     # Metrics
     acc = sum(1 for i, p in enumerate(preds) if p["label"] == gold[i]) / len(gold)
-    avg_temp = statistics.mean([t for t in _cpu_temp_c if t > 0]) if any(_cpu_temp_c) else 60.0
     ts = time.strftime("%Y-%m-%d_%H-%M-%S")
 
     row = {
         "samples": int(args.samples),
-        "batch_size": int(BATCH_SIZE),                    # still numeric, for traceability
+        "batch_size": int(BATCH_SIZE),
         "accuracy": round(acc, 4),
         "total_inference_time_s": round(total_s, 2),
-        "avg_cpu_temp_c": round(avg_temp, 2),
         "cpu_avg_W": round(hw["cpu_avg_W"], 3),
         "cpu_energy_J": round(hw["cpu_energy_J"], 2),
         "ram_avg_W": round(hw["ram_avg_W"], 3),
@@ -251,7 +248,7 @@ def main(args):
     # Dashboard
     df = pd.read_csv(file)
     sns.set_theme(style="whitegrid")
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 18))
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12))
     sns.lineplot(data=df, x="samples", y="total_inference_time_s", marker="o", ax=ax1)
     ax1.set_title("Inference Time (s)")
     ax1.set_xlabel("Number of Samples")
@@ -261,11 +258,6 @@ def main(args):
     ax2.set_title("Total Energy (J)")
     ax2.set_xlabel("Number of Samples")
     ax2.set_ylabel("Energy (J)")
-
-    sns.lineplot(data=df, x="samples", y="avg_cpu_temp_c", marker="o", ax=ax3)
-    ax3.set_title("Average CPU Temp (°C)")
-    ax3.set_xlabel("Number of Samples")
-    ax3.set_ylabel("Temperature (°C)")
 
     plt.tight_layout()
     out_png = f"dashboard_{ts}.png"
